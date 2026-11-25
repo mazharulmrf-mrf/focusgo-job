@@ -122,13 +122,11 @@ async function main() {
     if (src.type === "teletalk-api") {
       try {
         const all = await collectTeletalkApi(src);
-        const fresh = all.filter((j) => !known.has(j.id));
+        // ডেডলাইন API-তে নেই, তাই এগুলো সরাসরি jobs.json এ যায় (অ্যাপে "শেষ তারিখ দেখুন" দেখাবে)
+        const have = new Set(jobs.map((j) => j.id));
+        const fresh = all.filter((j) => !have.has(j.id));
         console.log(`  ${all.length} প্রতিষ্ঠান, ${fresh.length} নতুন`);
-        for (const job of fresh) {
-          known.add(job.id);
-          if (job.deadline && diffDays(job.deadline, today) >= 0) { jobs.push(job); added++; }
-          else if (!job.deadline) { pending.push(job); queued++; }
-        }
+        for (const job of fresh) { jobs.push(job); added++; }
       } catch (e) { console.warn("  api fail:", e.message); }
       continue;
     }
@@ -150,7 +148,7 @@ async function main() {
   for (const m of read(MANUAL)) byId.set(m.id || idOf(m.applyUrl || m.title), { id: idOf(m.applyUrl || m.title), posted: today, ...m });
 
   const final = [...byId.values()]
-    .filter((j) => j.deadline && diffDays(today, j.deadline) <= KEEP_AFTER_DEADLINE)
+    .filter((j) => (j.deadline ? diffDays(today, j.deadline) <= KEEP_AFTER_DEADLINE : diffDays(today, j.posted) <= 30))  // ডেডলাইন নেই → প্রকাশের ৩০ দিন পর্যন্ত রাখে
     .sort((a, b) => (b.posted > a.posted ? 1 : -1));
 
   fs.writeFileSync(OUT, JSON.stringify(final, null, 2));
