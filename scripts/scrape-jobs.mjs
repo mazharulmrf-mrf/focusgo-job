@@ -86,8 +86,9 @@ async function buildJob(src, { title, href }) {
   return job;
 }
 
-// Teletalk Alljobs: org-list API → প্রতিষ্ঠান প্রতি একটি আইটেম (ওই প্রতিষ্ঠানের সব পদ একসাথে)।
-// ⚠ এই API-তে ডেডলাইন নেই, তাই আইটেমগুলো আপাতত pending.json এ যাবে (detail API পেলে ডেডলাইন বসানো যাবে)।
+// Teletalk Alljobs: org-list API -> প্রতিটি পদের জন্য আলাদা আইটেম, সরাসরি job link সহ।
+// Direct link-এর format (সাইটে click করে যাচাই করা): /jobs/government/<orgId>?jobId=<jobId>
+// ওই page-এ ওই পদের বিস্তারিত (আবেদনের শুরু/শেষ তারিখসহ) দেখায়; org-এর বাকি পদও সেখানেই থাকে।
 async function collectTeletalkApi(src) {
   const items = [];
   let total = Infinity;
@@ -97,22 +98,26 @@ async function collectTeletalkApi(src) {
     const orgs = r.govtOrgJobs || [];
     if (!orgs.length) break;
     for (const o of orgs) {
-      const titles = (o.govt_jobs || []).map((j) => clean(j.job_title_bn || j.job_title)).filter(Boolean);
       const orgName = clean(o.name_bn || o.name);
-      items.push({
-        id: idOf(`teletalk-org-${o.id}-${o.job_created_at}`),
-        org: orgName,
-        title: `${orgName} — ${titles.length}টি পদে নিয়োগ`,
-        positions: String(titles.length),
-        posted: (o.job_created_at || "").slice(0, 10) || today,
-        startDate: (o.job_created_at || "").slice(0, 10) || today,
-        deadline: null,
-        eligibility: null, applyMode: "অনলাইন (Teletalk Alljobs)",
-        applyUrl: src.url, pdfUrl: null, sourceUrl: src.url,
-        orgWebsite: o.website || null,
-        source: "teletalk", priority: 1,
-        summary: `পদসমূহ: ${titles.join(", ")}`,
-      });
+      const posted = (o.job_created_at || "").slice(0, 10) || today;
+      for (const j of (o.govt_jobs || [])) {
+        const title = clean(j.job_title_bn || j.job_title);
+        if (!title || !j.id) continue;
+        const link = `${src.url}/${o.id}?jobId=${j.id}`;
+        items.push({
+          id: `tg-${j.id}`,
+          org: orgName,
+          title,
+          positions: null, // org-list API-তে শূন্যপদের সংখ্যা থাকে না; detail page-এ থাকে
+          posted, startDate: posted,
+          deadline: null, // deadline detail page-এ থাকে, public API-তে নেই
+          eligibility: null, applyMode: "অনলাইন (Teletalk Alljobs)",
+          applyUrl: link, pdfUrl: null, sourceUrl: link,
+          orgWebsite: o.website || null,
+          source: "teletalk", priority: 1,
+          summary: null,
+        });
+      }
     }
     if (orgs.length < (src.limit || 20)) break;
   }
@@ -129,11 +134,10 @@ async function main() {
     if (src.type === "teletalk-api") {
       try {
         const all = await collectTeletalkApi(src);
-        // ডেডলাইন API-তে নেই, তাই এগুলো সরাসরি jobs.json এ যায় (অ্যাপে "শেষ তারিখ দেখুন" দেখাবে)
-        const have = new Set(jobs.map((j) => j.id));
-        const fresh = all.filter((j) => !have.has(j.id));
-        console.log(`  ${all.length} প্রতিষ্ঠান, ${fresh.length} নতুন`);
-        for (const job of fresh) { jobs.push(job); added++; }
+        // পুরনো org-ভিত্তিক Teletalk আইটেম (default linkওয়ালা) ফেলে দিয়ে পদ-ভিত্তিক নতুনগুলো বসে
+        for (let i = jobs.length - 1; i >= 0; i--) if (jobs[i].source === "teletalk") jobs.splice(i, 1);
+        for (const job of all) { jobs.push(job); added++; }
+        console.log(`  ${all.length}টি পদ (সরাসরি link সহ)`);
       } catch (e) { console.warn("  api fail:", e.message); }
       continue;
     }
