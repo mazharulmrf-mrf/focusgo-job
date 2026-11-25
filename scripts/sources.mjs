@@ -14,7 +14,7 @@ export const SOURCES = [
   // type: "teletalk-api" → HTML নয়, সরাসরি JSON API থেকে প্রতিষ্ঠান-ভিত্তিক তালিকা আনে (পেজ JavaScript দিয়ে লোড হয় বলে)।
   // applyUrl দেওয়া নেই, তাই প্রতিটি আইটেমের নিজের লিংকই আবেদন লিংক হবে।
   { org: "টেলিটক (সরকারি চাকরি)", type: "teletalk-api", url: "https://alljobs.teletalk.com.bd/jobs/government",
-    api: "https://alljobs.teletalk.com.bd/api/v1/govt-jobs/org-list", limit: 20, maxPages: 5, primary: true },
+    api: "https://alljobs.teletalk.com.bd/api/v1/govt-jobs/org-list", limit: 20, primary: true }, // limit = সার্ভারের page size; সব page-ই আনা হবে, সংখ্যায় কোনো limit নেই
 
   // অফিশিয়াল সাইট
   { org: "BPSC",            url: "https://www.bpsc.gov.bd/",          include: /নিয়োগ|বিজ্ঞপ্তি|circular|recruit/i, applyUrl: "https://bpsc.teletalk.com.bd" },

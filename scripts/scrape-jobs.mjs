@@ -8,7 +8,6 @@ import { findDeadline, findStart, findPositions, todayDhaka, addDays, diffDays }
 
 const OUT = "public/jobs.json", PENDING = "public/pending.json", MANUAL = "data/manual.json";
 const KEEP_AFTER_DEADLINE = 14;       // মেয়াদ শেষের পর কত দিন লিস্টে রাখবে
-const MAX_NEW_PER_SOURCE = 15;        // এক রানে প্রতি সোর্স থেকে সর্বোচ্চ নতুন আইটেম
 const UA = "Mozilla/5.0 (compatible; FocusGoJobsBot/1.0)";
 const today = todayDhaka();
 
@@ -45,17 +44,24 @@ async function extractWithAI({ title, text, pdfBuf }) {
 }
 
 async function collectLinks(src) {
-  const html = await get(src.url);
-  const $ = cheerio.load(html);
-  const scope = src.selector ? $(src.selector) : $.root();
+  // কোনো limit নেই: category-র /page/2/, /page/3/ ... ধরে শেষ page পর্যন্ত যায়।
+  // যে page-এ আর কোনো মিল পাওয়া যায় না, সেখানেই থামে।
   const seen = new Set(), out = [];
-  scope.find("a[href]").each((_, a) => {
-    const title = clean($(a).text());
-    if (title.length < 12 || !src.include.test(title)) return;
-    let href; try { href = new URL($(a).attr("href"), src.url).href; } catch { return; }
-    if (seen.has(href)) return; seen.add(href);
-    out.push({ title, href });
-  });
+  for (let page = 1; ; page++) {
+    const url = page === 1 ? src.url : src.url.replace(/\/?$/, "/") + `page/${page}/`;
+    let html; try { html = await get(url); } catch { break; }
+    const $ = cheerio.load(html);
+    const scope = src.selector ? $(src.selector) : $.root();
+    let found = 0;
+    scope.find("a[href]").each((_, a) => {
+      const title = clean($(a).text());
+      if (title.length < 12 || !src.include.test(title)) return;
+      let href; try { href = new URL($(a).attr("href"), src.url).href; } catch { return; }
+      if (seen.has(href)) return; seen.add(href); found++;
+      out.push({ title, href });
+    });
+    if (!found) break;
+  }
   return out;
 }
 
@@ -71,7 +77,7 @@ async function buildJob(src, { title, href }) {
     id: idOf(href), org: src.org, title, positions: findPositions(text), posted: today,
     startDate: findStart(text) || today, deadline: findDeadline(text),
     eligibility: null, applyMode: null, applyUrl: src.applyUrl || href, pdfUrl: isPdf ? href : null,
-    sourceUrl: href, summary: null,
+    sourceUrl: href, summary: null, source: "collection", priority: 2,
   };
   const ai = await extractWithAI({ title, text, pdfBuf });
   if (ai) for (const k of ["positions", "startDate", "deadline", "eligibility", "applyMode", "applyUrl", "summary"]) {
@@ -85,7 +91,7 @@ async function buildJob(src, { title, href }) {
 async function collectTeletalkApi(src) {
   const items = [];
   let total = Infinity;
-  for (let page = 1; page <= (src.maxPages || 5) && items.length < total; page++) {
+  for (let page = 1; items.length < total; page++) { // কোনো page limit নেই — API-র count শেষ না হওয়া পর্যন্ত
     const r = JSON.parse(await get(`${src.api}?page=${page}&limit=${src.limit || 20}`));
     total = r.count ?? total;
     const orgs = r.govtOrgJobs || [];
@@ -104,6 +110,7 @@ async function collectTeletalkApi(src) {
         eligibility: null, applyMode: "অনলাইন (Teletalk Alljobs)",
         applyUrl: src.url, pdfUrl: null, sourceUrl: src.url,
         orgWebsite: o.website || null,
+        source: "teletalk", priority: 1,
         summary: `পদসমূহ: ${titles.join(", ")}`,
       });
     }
@@ -132,7 +139,7 @@ async function main() {
     }
     let links = [];
     try { links = await collectLinks(src); } catch (e) { console.warn("  list fail:", e.message); continue; }
-    const fresh = links.filter((l) => !known.has(idOf(l.href))).slice(0, MAX_NEW_PER_SOURCE);
+    const fresh = links.filter((l) => !known.has(idOf(l.href))); // কোনো limit নেই — সব নতুন লিংকই নেওয়া হবে
     console.log(`  ${links.length} লিংক, ${fresh.length} নতুন`);
     for (const l of fresh) {
       const job = await buildJob(src, l);
@@ -149,10 +156,10 @@ async function main() {
 
   const final = [...byId.values()]
     .filter((j) => (j.deadline ? diffDays(today, j.deadline) <= KEEP_AFTER_DEADLINE : diffDays(today, j.posted) <= 30))  // ডেডলাইন নেই → প্রকাশের ৩০ দিন পর্যন্ত রাখে
-    .sort((a, b) => (b.posted > a.posted ? 1 : -1));
+    .sort((a, b) => ((a.priority ?? 2) - (b.priority ?? 2)) || (b.posted > a.posted ? 1 : -1)); // মূল সোর্স Teletalk সবার আগে
 
   fs.writeFileSync(OUT, JSON.stringify(final, null, 2));
-  fs.writeFileSync(PENDING, JSON.stringify(pending.slice(-100), null, 2));
+  fs.writeFileSync(PENDING, JSON.stringify(pending, null, 2));
   console.log(`✔ jobs=${final.length} (+${added}), pending=${pending.length} (+${queued})`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
