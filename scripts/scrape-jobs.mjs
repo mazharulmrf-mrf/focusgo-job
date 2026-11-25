@@ -80,6 +80,38 @@ async function buildJob(src, { title, href }) {
   return job;
 }
 
+// Teletalk Alljobs: org-list API → প্রতিষ্ঠান প্রতি একটি আইটেম (ওই প্রতিষ্ঠানের সব পদ একসাথে)।
+// ⚠ এই API-তে ডেডলাইন নেই, তাই আইটেমগুলো আপাতত pending.json এ যাবে (detail API পেলে ডেডলাইন বসানো যাবে)।
+async function collectTeletalkApi(src) {
+  const items = [];
+  let total = Infinity;
+  for (let page = 1; page <= (src.maxPages || 5) && items.length < total; page++) {
+    const r = JSON.parse(await get(`${src.api}?page=${page}&limit=${src.limit || 20}`));
+    total = r.count ?? total;
+    const orgs = r.govtOrgJobs || [];
+    if (!orgs.length) break;
+    for (const o of orgs) {
+      const titles = (o.govt_jobs || []).map((j) => clean(j.job_title_bn || j.job_title)).filter(Boolean);
+      const orgName = clean(o.name_bn || o.name);
+      items.push({
+        id: idOf(`teletalk-org-${o.id}-${o.job_created_at}`),
+        org: orgName,
+        title: `${orgName} — ${titles.length}টি পদে নিয়োগ`,
+        positions: String(titles.length),
+        posted: (o.job_created_at || "").slice(0, 10) || today,
+        startDate: (o.job_created_at || "").slice(0, 10) || today,
+        deadline: null,
+        eligibility: null, applyMode: "অনলাইন (Teletalk Alljobs)",
+        applyUrl: src.url, pdfUrl: null, sourceUrl: src.url,
+        orgWebsite: o.website || null,
+        summary: `পদসমূহ: ${titles.join(", ")}`,
+      });
+    }
+    if (orgs.length < (src.limit || 20)) break;
+  }
+  return items;
+}
+
 async function main() {
   const jobs = read(OUT), pending = read(PENDING);
   const known = new Set([...jobs, ...pending].map((j) => j.id));
@@ -87,6 +119,19 @@ async function main() {
 
   for (const src of SOURCES) {
     console.log(`▶ ${src.org} — ${src.url}`);
+    if (src.type === "teletalk-api") {
+      try {
+        const all = await collectTeletalkApi(src);
+        const fresh = all.filter((j) => !known.has(j.id));
+        console.log(`  ${all.length} প্রতিষ্ঠান, ${fresh.length} নতুন`);
+        for (const job of fresh) {
+          known.add(job.id);
+          if (job.deadline && diffDays(job.deadline, today) >= 0) { jobs.push(job); added++; }
+          else if (!job.deadline) { pending.push(job); queued++; }
+        }
+      } catch (e) { console.warn("  api fail:", e.message); }
+      continue;
+    }
     let links = [];
     try { links = await collectLinks(src); } catch (e) { console.warn("  list fail:", e.message); continue; }
     const fresh = links.filter((l) => !known.has(idOf(l.href))).slice(0, MAX_NEW_PER_SOURCE);
