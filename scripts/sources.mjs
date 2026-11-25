@@ -28,3 +28,4 @@ export const SOURCES = [
   { org: "Bangla Cyber (সংকলন)",    url: "https://www.banglacyber.com/category/govt-job-bd/",        include: GOVT_ONLY },
   // { org: "…", url: "…", selector: ".notice-list", include: JOB_WORDS },
 ];
+console.log("sources.mjs loaded, total:", SOURCES.length);
