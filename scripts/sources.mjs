@@ -24,8 +24,6 @@ export const SOURCES = [
   // সহায়ক সংকলন সাইট (অফিশিয়াল নয়); আবেদনের আগে পোস্টের ভেতরের অফিশিয়াল লিংক মিলিয়ে নিন।
   // GOVT_ONLY ব্যবহার করা হয়েছে যাতে প্রাইভেট/বেসরকারি চাকরি না আসে।
   { org: "BD Govt Job (সংকলন)",     url: "https://bdgovtjob.net/category/government-jobs-circular/", include: GOVT_ONLY },
-  { org: "BD Govt Notice (সংকলন)",  url: "https://bdgovtnotice.com/category/govt-job-circular/",     include: GOVT_ONLY },
-  { org: "Bangla Cyber (সংকলন)",    url: "https://www.banglacyber.com/category/govt-job-bd/",        include: GOVT_ONLY },
   // { org: "…", url: "…", selector: ".notice-list", include: JOB_WORDS },
 ];
 console.log("sources.mjs loaded, total:", SOURCES.length);
