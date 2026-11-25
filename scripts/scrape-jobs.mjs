@@ -86,40 +86,57 @@ async function buildJob(src, { title, href }) {
   return job;
 }
 
-// Teletalk Alljobs: org-list API -> প্রতিটি পদের জন্য আলাদা আইটেম, সরাসরি job link সহ।
+// Teletalk Alljobs: org-list API -> প্রতিষ্ঠান, তারপর প্রতিষ্ঠানপ্রতি list API -> প্রতিটি পদের
+// সরাসরি link + আবেদন শুরুর তারিখ (published_date) + শেষ তারিখ (deadline_date) + শূন্যপদ (vacancy)।
 // Direct link-এর format (সাইটে click করে যাচাই করা): /jobs/government/<orgId>?jobId=<jobId>
-// ওই page-এ ওই পদের বিস্তারিত (আবেদনের শুরু/শেষ তারিখসহ) দেখায়; org-এর বাকি পদও সেখানেই থাকে।
+// তারিখগুলো API-তে UTC-তে থাকে; ঢাকার তারিখে রূপান্তর করা হয় (UTC+6)।
+const dhakaDate = (isoStr) => {
+  if (!isoStr) return null;
+  const t = new Date(isoStr).getTime();
+  return Number.isNaN(t) ? null : new Date(t + 6 * 3600 * 1000).toISOString().slice(0, 10);
+};
+
 async function collectTeletalkApi(src) {
-  const items = [];
+  const apiBase = src.api.replace(/\/org-list$/, "");
+  const orgs = [];
   let total = Infinity;
-  for (let page = 1; items.length < total; page++) { // কোনো page limit নেই — API-র count শেষ না হওয়া পর্যন্ত
+  for (let page = 1; orgs.length < total; page++) { // কোনো page limit নেই
     const r = JSON.parse(await get(`${src.api}?page=${page}&limit=${src.limit || 20}`));
     total = r.count ?? total;
-    const orgs = r.govtOrgJobs || [];
-    if (!orgs.length) break;
-    for (const o of orgs) {
-      const orgName = clean(o.name_bn || o.name);
-      const posted = (o.job_created_at || "").slice(0, 10) || today;
-      for (const j of (o.govt_jobs || [])) {
-        const title = clean(j.job_title_bn || j.job_title);
-        if (!title || !j.id) continue;
-        const link = `${src.url}/${o.id}?jobId=${j.id}`;
-        items.push({
-          id: `tg-${j.id}`,
-          org: orgName,
-          title,
-          positions: null, // org-list API-তে শূন্যপদের সংখ্যা থাকে না; detail page-এ থাকে
-          posted, startDate: posted,
-          deadline: null, // deadline detail page-এ থাকে, public API-তে নেই
-          eligibility: null, applyMode: "অনলাইন (Teletalk Alljobs)",
-          applyUrl: link, pdfUrl: null, sourceUrl: link,
-          orgWebsite: o.website || null,
-          source: "teletalk", priority: 1,
-          summary: null,
-        });
-      }
+    const batch = r.govtOrgJobs || [];
+    if (!batch.length) break;
+    orgs.push(...batch);
+    if (batch.length < (src.limit || 20)) break;
+  }
+  const items = [];
+  for (const o of orgs) {
+    let jobs = [];
+    try {
+      const r = JSON.parse(await get(`${apiBase}/list?orgId=${o.id}&skipLimit=YES`));
+      jobs = r.govtJobs || [];
+    } catch (e) { console.warn("  org list fail:", o.id, e.message); continue; }
+    for (const j of jobs) {
+      const title = clean(j.job_title_bn || j.job_title);
+      if (!title || !j.id) continue;
+      const orgName = clean((j.job_utilities_govtorganization || {}).name_bn || (j.job_utilities_govtorganization || {}).name || o.name_bn || o.name);
+      const link = `${src.url}/${o.id}?jobId=${j.id}`;
+      const vac = j.vacancy_not_specific ? null : (j.vacancy != null && /^\d+$/.test(String(j.vacancy).trim()) ? String(parseInt(j.vacancy, 10)) : (j.vacancy || null));
+      items.push({
+        id: `tg-${j.id}`,
+        org: orgName,
+        title,
+        positions: vac,
+        posted: dhakaDate(j.created_at) || today,
+        startDate: dhakaDate(j.published_date) || dhakaDate(j.created_at) || today,
+        deadline: dhakaDate(j.deadline_date),
+        eligibility: null, applyMode: "অনলাইন (Teletalk Alljobs)",
+        applyUrl: link, pdfUrl: null, sourceUrl: link,
+        applySite: j.application_site || null,
+        orgWebsite: o.website || null,
+        source: "teletalk", priority: 1,
+        summary: null,
+      });
     }
-    if (orgs.length < (src.limit || 20)) break;
   }
   return items;
 }
