@@ -8,6 +8,8 @@ export const SOURCES = [
   { org: "বাংলাদেশ ব্যাংক", url: "https://erecruitment.bb.org.bd/",    include: JOB_WORDS, applyUrl: "https://erecruitment.bb.org.bd" },
   { org: "প্রাথমিক ও গণশিক্ষা", url: "https://dpe.gov.bd/",           include: JOB_WORDS, applyUrl: "https://dpe.teletalk.com.bd" },
   // Teletalk-এর সব চাকরির পোর্টাল (একাধিক প্রতিষ্ঠান)। applyUrl দেওয়া নেই, তাই প্রতিটি আইটেমের নিজের লিংকই আবেদন লিংক হবে।
-  { org: "টেলিটক (সকল চাকরি)", url: "https://alljobs.teletalk.com.bd/jobs/government", include: JOB_WORDS },
+  { org: "টেলিটক (সরকারি চাকরি)", url: "https://alljobs.teletalk.com.bd/jobs/government", include: JOB_WORDS },
+  // bdgovtjob.net একটি অনলাইন সংকলন সাইট (অফিশিয়াল নয়); আবেদনের আগে পোস্টের ভেতরের অফিশিয়াল লিংক মিলিয়ে নিন।
+  { org: "BD Govt Job (সংকলন)", url: "https://bdgovtjob.net/category/government-jobs-circular/", include: JOB_WORDS },
   // { org: "…", url: "…", selector: ".notice-list", include: JOB_WORDS },
 ];
