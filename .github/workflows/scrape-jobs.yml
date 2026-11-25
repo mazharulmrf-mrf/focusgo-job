@@ -36,4 +36,13 @@ jobs:
           git config user.name "jobs-bot"
           git config user.email "jobs-bot@users.noreply.github.com"
           git add -A
-          git diff --staged --quiet || (git commit -m "chore: update" && git push)
+          if git diff --staged --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "chore: update"
+          # Run চলার সময় repo-তে অন্য commit এলে push reject হয় — তাই pull করে আবার চেষ্টা করে।
+          # jobs.json generated file, conflict হলে bot-এর version-টাই থাকবে (-X theirs)।
+          for i in 1 2 3 4 5; do
+            git pull --no-rebase -X theirs origin main && git push && exit 0
+            echo "Push rejected, retry $i..."
+            sleep 10
+          done
+          echo "Push failed after retries" && exit 1
