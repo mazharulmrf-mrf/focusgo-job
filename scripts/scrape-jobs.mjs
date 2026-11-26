@@ -141,6 +141,50 @@ async function collectTeletalkApi(src) {
   return items;
 }
 
+
+// ================= Duplicate বাদ: BD Govt Job-এর যেসব সার্কুলার Teletalk-এও আছে =================
+// Teletalk মূল সোর্স (direct link + deadline থাকে), তাই একই প্রতিষ্ঠানের সংকলন কপি বাদ যাবে।
+const BN_D = {"০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9"};
+const normT = (x) => (x || "").normalize("NFC")
+  .replace(/\u09AF\u09BC/g, "\u09DF").replace(/[০-৯]/g, (c) => BN_D[c])
+  .replace(/\u09C0/g, "\u09BF").replace(/র্প/g, "রপ").replace(/লিঃ|লিমিটেড/g, " ")
+  .toLowerCase().replace(/[()\-\–,./:;।'"’‘]/g, " ").replace(/\s+/g, " ").trim();
+const PLACES = { "বগুড়া":"bogra", "ঢাকা":"dhaka", "দিনাজপুর":"dinajpur", "চট্টগ্রাম":"chattogram", "রাজশাহী":"rajshahi", "খুলনা":"khulna", "বরিশাল":"barishal", "সিলেট":"sylhet", "রংপুর":"rangpur", "ময়মনসিংহ":"mymensingh", "কুমিল্লা":"cumilla", "গাজীপুর":"gazipur", "নারায়ণগঞ্জ":"narayanganj", "যশোর":"jashore", "নোয়াখালী":"noakhali", "শেরপুর":"sherpur", "লালমনিরহাট":"lalmonirhat", "নেত্রকোনা":"netrokona", "চাঁদপুর":"chandpur", "সিরাজগঞ্জ":"sirajganj", "রাঙামাটি":"rangamati", "খাগড়াছড়ি":"khagrachhari", "বাগেরহাট":"bagerhat", "মাগুরা":"magura", "রাজবাড়ী":"rajbari" };
+function tgKeysOf(org) {
+  const codeM = org.match(/\(([^)]+)\)/);
+  const keys = { code: codeM ? codeM[1].replace(/\s/g, "").toLowerCase() : null,
+    name: normT(org.replace(/\([^)]+\)/g, "")), alt: normT((org.match(/\(([^)]+)\)/) || [])[1] || ""), places: new Set() };
+  for (const [bn, en] of Object.entries(PLACES)) if (keys.name.includes(bn) || keys.name.includes(en)) keys.places.add(en);
+  return keys;
+}
+function isDupOfTeletalk(title, tgKeysList) {
+  let bn = (title || "").replace(/^\s*[০-৯0-9]+\s*পদে\s*/, "");
+  if (/^\s*সকল\s/.test(bn)) return false; // "সকল ..." roundup পোস্ট রাখা হবে
+  bn = normT(bn.split(/নিয়োগ|নিয়োগ|Job Circular|job circular/)[0]);
+  const latin = normT(((title || "").match(/[A-Za-z][A-Za-z0-9 .,&-]*$/g) || [""])[0] || "");
+  const codes = new Set(((title || "").match(/[A-Z]{2,}[0-9]*/g) || []).map((c) => c.toLowerCase()));
+  const hay = bn + " " + latin;
+  const places = new Set();
+  for (const [b, en] of Object.entries(PLACES)) if (hay.includes(b) || hay.includes(en)) places.add(en);
+  for (const k of tgKeysList) {
+    if (k.code && codes.has(k.code)) return true;
+    if (bn.length >= 5 && (k.name.includes(bn) || bn.includes(k.name))) return true;
+    if (latin.length >= 8 && (k.name.includes(latin) || latin.includes(k.name))) return true;
+    if (k.alt && k.alt.length >= 4 && (latin.includes(k.alt) || bn.includes(k.alt))) return true;
+    const cats = [["বিভাগীয় কমিশনার", "divisional commissioner"], ["পুলিশ সুপার", "police"], ["জেলা প্রশাসক", "dc office"], ["সিভিল সার্জন", "civil surgeon"]];
+    for (const [bnC, enC] of cats) if (bn.includes(bnC) && (k.name.includes(bnC) || k.name.includes(enC)) && [...places].some((pl) => k.places.has(pl))) return true;
+    const cTax = bn.includes("কর অঞ্চল") || /\btax/.test(latin);
+    const kTax = k.name.includes("কর অঞ্চল") || /\btax/.test(k.name);
+    if (cTax && kTax) {
+      const cNums = new Set(hay.match(/\d+/g) || []), kNums = new Set(k.name.match(/\d+/g) || []);
+      const numShare = [...cNums].some((n) => kNums.has(n));
+      const placeShare = [...places].some((pl) => k.places.has(pl));
+      if ((cNums.size && numShare) || (placeShare && (cNums.size === 0 || kNums.size === 0 || numShare))) return true;
+    }
+  }
+  return false;
+}
+
 async function main() {
   const jobs = read(OUT), pending = read(PENDING);
   const known = new Set([...jobs, ...pending].map((j) => j.id));
@@ -179,8 +223,13 @@ async function main() {
     .filter((j) => (j.deadline ? diffDays(today, j.deadline) <= KEEP_AFTER_DEADLINE : diffDays(today, j.posted) <= 30))  // ডেডলাইন নেই → প্রকাশের ৩০ দিন পর্যন্ত রাখে
     .sort((a, b) => ((a.priority ?? 2) - (b.priority ?? 2)) || (b.posted > a.posted ? 1 : -1)); // মূল সোর্স Teletalk সবার আগে
 
-  fs.writeFileSync(OUT, JSON.stringify(final, null, 2));
+  // Teletalk-এ থাকা প্রতিষ্ঠানের সংকলন duplicate বাদ (পুরনো জমে থাকা কপিও পরিষ্কার হবে)
+  const tgKeysList = [...new Set(final.filter((j) => j.source === "teletalk").map((j) => j.org))].map(tgKeysOf);
+  const deduped = final.filter((j) => j.source === "teletalk" || !isDupOfTeletalk(j.title, tgKeysList));
+  if (deduped.length < final.length) console.log(`Duplicates removed (also on Teletalk): ${final.length - deduped.length}`);
+
+  fs.writeFileSync(OUT, JSON.stringify(deduped, null, 2));
   fs.writeFileSync(PENDING, JSON.stringify(pending, null, 2));
-  console.log(`✔ jobs=${final.length} (+${added}), pending=${pending.length} (+${queued})`);
+  console.log(`✔ jobs=${deduped.length} (+${added}), pending=${pending.length} (+${queued})`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
