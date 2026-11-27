@@ -185,6 +185,18 @@ function isDupOfTeletalk(title, tgKeysList) {
   return false;
 }
 
+
+// ============ শিক্ষাপ্রতিষ্ঠান বাদ: বিশ্ববিদ্যালয় / স্কুল / কলেজের circular আসবে না ============
+// অধিদপ্তর/মন্ত্রণালয়ের circular (যেমন প্রাথমিক শিক্ষক নিয়োগ) থাকবে — ওগুলো প্রতিষ্ঠান না, নিয়োগকারী কর্তৃপক্ষ।
+// BCPS (বাংলাদেশ কলেজ অব ফিজিশিয়ানস্) ব্যতিক্রম — নামে কলেজ হলেও ওটা চিকিৎসকদের প্রতিষ্ঠান, পড়ার কলেজ না।
+const EDU_WORDS = ["বিশ্ববিদ্যালয়", "বিশ্ববিদ্যালয়", "বিদ্যালয়", "বিদ্যালয়", "স্কুল", "কলেজ", "university", "school", "college"];
+const EDU_KEEP = ["অধিদপ্তর", "মন্ত্রণালয়", "মন্ত্রণালয়", "শিক্ষা বোর্ড", "ফিজিশিয়ানস", "bcps"];
+function isEduInstitution(j) {
+  const t = (String(j.title || "") + " " + String(j.org || "")).toLowerCase();
+  if (EDU_KEEP.some((w) => t.includes(w.toLowerCase()))) return false;
+  return EDU_WORDS.some((w) => t.includes(w.toLowerCase()));
+}
+
 async function main() {
   const jobs = read(OUT), pending = read(PENDING);
   const known = new Set([...jobs, ...pending].map((j) => j.id));
@@ -227,9 +239,11 @@ async function main() {
   const tgKeysList = [...new Set(final.filter((j) => j.source === "teletalk").map((j) => j.org))].map(tgKeysOf);
   const deduped = final.filter((j) => j.source === "teletalk" || !isDupOfTeletalk(j.title, tgKeysList));
   if (deduped.length < final.length) console.log(`Duplicates removed (also on Teletalk): ${final.length - deduped.length}`);
+  const noEdu = deduped.filter((j) => !isEduInstitution(j));
+  if (noEdu.length < deduped.length) console.log(`Education institutions removed (university/school/college): ${deduped.length - noEdu.length}`);
 
-  fs.writeFileSync(OUT, JSON.stringify(deduped, null, 2));
+  fs.writeFileSync(OUT, JSON.stringify(noEdu, null, 2));
   fs.writeFileSync(PENDING, JSON.stringify(pending, null, 2));
-  console.log(`✔ jobs=${deduped.length} (+${added}), pending=${pending.length} (+${queued})`);
+  console.log(`✔ jobs=${noEdu.length} (+${added}), pending=${pending.length} (+${queued})`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
