@@ -1034,5 +1034,39 @@
     "summary": null,
     "source": "collection",
     "priority": 2
+  },
+  {
+    "id": "dd5025c9be14",
+    "org": "BD Govt Job (সংকলন)",
+    "title": "পপুলার ফার্মাসিউটিক্যালস নিয়োগ বিজ্ঞপ্তি ২০২৬",
+    "positions": null,
+    "posted": "2026-11-27",
+    "startDate": "2026-11-27",
+    "deadline": null,
+    "eligibility": null,
+    "applyMode": null,
+    "applyUrl": "https://bdgovtjob.net/popular-pharmaceuticals-ltd-job-circular/",
+    "pdfUrl": null,
+    "sourceUrl": "https://bdgovtjob.net/popular-pharmaceuticals-ltd-job-circular/",
+    "summary": null,
+    "source": "collection",
+    "priority": 2
+  },
+  {
+    "id": "1b2d208fe9ca",
+    "org": "BD Govt Job (সংকলন)",
+    "title": "রেনেটা লিমিটেড নিয়োগ বিজ্ঞপ্তি ২০২৬ Renata Limited Job Circular 2026",
+    "positions": null,
+    "posted": "2026-11-27",
+    "startDate": "2026-11-27",
+    "deadline": null,
+    "eligibility": null,
+    "applyMode": null,
+    "applyUrl": "https://bdgovtjob.net/renata-job-circular/",
+    "pdfUrl": null,
+    "sourceUrl": "https://bdgovtjob.net/renata-job-circular/",
+    "summary": null,
+    "source": "collection",
+    "priority": 2
   }
 ]
